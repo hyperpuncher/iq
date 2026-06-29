@@ -21,6 +21,20 @@ cat data.json | iq
 
 ## install
 
+### arch linux
+
+```
+paru -S iq-bin
+```
+
+### macos
+
+```
+brew install hyperpuncher/tap/iq
+```
+
+### source
+
 ```
 cargo install --git https://github.com/hyperpuncher/iq
 ```
@@ -49,7 +63,6 @@ or grab a binary from the [latest release](https://github.com/hyperpuncher/iq/re
 - `enter` copies the current filter (query) to clipboard.
 - `shift+enter` copies the full output to clipboard, prints it to stdout with
   syntax highlighting, and exits.
-  windows.
 
 ## build
 
