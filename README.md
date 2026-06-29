@@ -29,19 +29,27 @@ or grab a binary from the [latest release](https://github.com/hyperpuncher/iq/re
 
 ## keys
 
-| key             | action                                 |
-| --------------- | -------------------------------------- |
-| tab             | cycle completion (popup opens on type) |
-| enter           | accept popup, else push history        |
-| up/down         | cycle popup / history (empty input)    |
-| left/right      | move cursor                            |
-| home/end        | cursor to line edges                   |
-| backspace/del   | delete left/right char                 |
-| pgup/pgdn       | page scroll                            |
-| mouse wheel     | scroll                                 |
-| ctrl+c / ctrl+d | quit                                   |
-| esc             | close popup, else quit                 |
-| f1              | debug overlay                          |
+| key             | action                                       |
+| --------------- | -------------------------------------------- |
+| tab             | cycle completion (popup opens on type)       |
+| enter           | accept popup, else push history + copy query |
+| shift+enter     | copy output, print to stdout, exit           |
+| up/down         | cycle popup / history (empty input)          |
+| left/right      | move cursor                                  |
+| home/end        | cursor to line edges                         |
+| backspace/del   | delete left/right char                       |
+| pgup/pgdn       | page scroll                                  |
+| mouse wheel     | scroll                                       |
+| ctrl+c / ctrl+d | quit                                         |
+| esc             | close popup, else quit                       |
+| f1              | debug overlay                                |
+
+## clipboard
+
+- `enter` copies the current filter (query) to clipboard.
+- `shift+enter` copies the full output to clipboard, prints it to stdout with
+  syntax highlighting, and exits.
+  windows.
 
 ## build
 

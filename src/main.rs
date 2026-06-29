@@ -128,6 +128,9 @@ fn main() -> Result<()> {
     io::stdout()
         .execute(DisableMouseCapture)?
         .execute(LeaveAlternateScreen)?;
+    if let Some(msg) = app.exit_message {
+        print!("{msg}");
+    }
     Ok(())
 }
 
@@ -165,6 +168,10 @@ struct App {
     /// Evaluator thread
     eval_tx: mpsc::Sender<String>,
     eval_rx: mpsc::Receiver<EvalResult>,
+    /// Timestamp of last query-to-clipboard copy (for "✓ Copied" flash)
+    copied_at: Option<Instant>,
+    /// Output text to print to stdout on exit (set by Shift+Enter)
+    exit_message: Option<String>,
 }
 
 struct Popup {
@@ -264,6 +271,8 @@ impl App {
             running: true,
             eval_tx,
             eval_rx,
+            copied_at: None,
+            exit_message: None,
         };
         app.eval_sync();
         app.open_completion();
@@ -303,6 +312,11 @@ impl App {
 
     /// Check if eval results arrived. Returns true if new results were applied.
     fn poll_eval(&mut self) -> bool {
+        if let Some(t) = self.copied_at
+            && t.elapsed() > Duration::from_millis(1500)
+        {
+            self.copied_at = None;
+        }
         let mut updated = false;
         while let Ok(result) = self.eval_rx.try_recv() {
             self.result_text = result.text;
@@ -543,8 +557,6 @@ const COLORS: qj::output::ColorScheme = qj::output::ColorScheme {
     reset: "\x1b[0m",
 };
 
-/// Render a JSON value to styled lines via qj's own serializer, then parse
-/// the embedded ANSI SGR codes back into ratatui `Span`s.
 /// Serialize a value to ANSI-colored pretty JSON text (no trailing newline).
 fn render_value(value: &qj::value::Value, size: usize) -> String {
     use qj::output::{OutputConfig, OutputMode, write_value};
@@ -558,6 +570,64 @@ fn render_value(value: &qj::value::Value, size: usize) -> String {
     let mut buf = Vec::new();
     write_value(&mut buf, value, &config).ok();
     String::from_utf8(buf).unwrap_or_default()
+}
+
+/// Strip ANSI SGR escape sequences, leaving plain text.
+fn strip_ansi(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b
+            && i + 1 < bytes.len()
+            && bytes[i + 1] == b'['
+            && let Some(off) = bytes[i + 2..].iter().position(|&b| b == b'm')
+        {
+            i += 2 + off + 1;
+            continue;
+        }
+        let ch = s[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// Copy text to system clipboard. Returns true if a clipboard tool was found
+/// and successfully spawned.
+fn copy_to_clipboard(text: &str) -> bool {
+    match std::env::consts::OS {
+        "linux" => {
+            for (cmd, args) in [
+                ("wl-copy", &[][..]),
+                ("xclip", &["-selection", "clipboard"][..]),
+            ] {
+                if try_clipboard_cmd(cmd, args, text) {
+                    return true;
+                }
+            }
+            false
+        }
+        "macos" => try_clipboard_cmd("pbcopy", &[], text),
+        "windows" => try_clipboard_cmd("clip.exe", &[], text),
+        _ => false,
+    }
+}
+
+fn try_clipboard_cmd(cmd: &str, args: &[&str], text: &str) -> bool {
+    let Ok(mut child) = std::process::Command::new(cmd)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+    else {
+        return false;
+    };
+    use std::io::Write;
+    if let Some(stdin) = child.stdin.as_mut() {
+        let _ = stdin.write_all(text.as_bytes());
+    }
+    let _ = child.wait();
+    true
 }
 
 /// Byte offset of the start of each line. Empty for empty text.
@@ -1063,14 +1133,18 @@ fn make_input_prompt(app: &App, width: u16) -> Vec<Line<'static>> {
         Line::from(Span::styled(sep, Style::default().fg(Color::DarkGray))),
     ];
 
-    // Status line: filename left, result info right
+    // Status line: filename left, result info right (or "✓ Copied" flash)
     if error_suffix.is_empty() {
-        let ms = app.eval_duration.map(|d| d.as_micros().max(1) / 1000);
-        let info = match (ms, app.result_count) {
-            (Some(ms), 0) => format!("0 results • {ms}ms"),
-            (Some(ms), 1) => format!("1 result • {ms}ms"),
-            (Some(ms), n) => format!("{n} results • {ms}ms"),
-            _ => String::new(),
+        let info = if app.copied_at.is_some() {
+            "✓ Copied".to_string()
+        } else {
+            let ms = app.eval_duration.map(|d| d.as_micros().max(1) / 1000);
+            match (ms, app.result_count) {
+                (Some(ms), 0) => format!("0 results • {ms}ms"),
+                (Some(ms), 1) => format!("1 result • {ms}ms"),
+                (Some(ms), n) => format!("{n} results • {ms}ms"),
+                _ => String::new(),
+            }
         };
         if info.is_empty() {
             lines.push(Line::from(Span::styled(
@@ -1121,6 +1195,14 @@ fn handle_event(app: &mut App, event: Event) {
                 }
             }
 
+            // Shift+Enter: copy output, exit to stdout
+            KeyCode::Enter if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                let colored = app.result_text.clone();
+                copy_to_clipboard(&strip_ansi(&colored));
+                app.exit_message = Some(colored);
+                app.running = false;
+            }
+
             // Tab completion
             KeyCode::Tab => app.cycle_or_open(),
             KeyCode::Enter | KeyCode::Char('\r') | KeyCode::Char('\n') if app.popup.is_some() => {
@@ -1131,6 +1213,9 @@ fn handle_event(app: &mut App, event: Event) {
                     app.open_completion();
                 } else {
                     app.push_history();
+                    if copy_to_clipboard(&app.input) {
+                        app.copied_at = Some(Instant::now());
+                    }
                 }
             }
 
