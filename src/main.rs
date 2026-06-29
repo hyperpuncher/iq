@@ -21,7 +21,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 #[derive(Parser)]
-#[command(name = "iq", version = "0.1.0", about = "Interactive jq REPL")]
+#[command(name = "iq", version, about = "Interactive jq REPL")]
 struct Args {
     /// JSON file to query (reads stdin if omitted)
     file: Option<PathBuf>,
