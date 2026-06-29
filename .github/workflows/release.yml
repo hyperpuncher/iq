@@ -94,7 +94,7 @@ jobs:
                       -e "s/{{SHA_LINUX_ARM64}}/${{ steps.sha.outputs.linux-arm64 }}/g" \
                       -e "s/{{SHA_DARWIN_X64}}/${{ steps.sha.outputs.darwin-x64 }}/g" \
                       -e "s/{{SHA_DARWIN_ARM64}}/${{ steps.sha.outputs.darwin-arm64 }}/g" \
-                      packaging/homebrew/iq.rb.tmpl > /tmp/iq.rb
+                      packaging/homebrew/iq.rb.in > /tmp/iq.rb
 
             - name: Push Homebrew formula
               env:
@@ -116,11 +116,11 @@ jobs:
                   sed -e "s/{{VERSION}}/$V/g" \
                       -e "s/{{SHA_LINUX_X64}}/${{ steps.sha.outputs.linux-x64 }}/g" \
                       -e "s/{{SHA_LINUX_ARM64}}/${{ steps.sha.outputs.linux-arm64 }}/g" \
-                      packaging/aur/PKGBUILD.tmpl > /tmp/PKGBUILD
+                      packaging/aur/PKGBUILD.in > /tmp/PKGBUILD
                   sed -e "s/{{VERSION}}/$V/g" \
                       -e "s/{{SHA_LINUX_X64}}/${{ steps.sha.outputs.linux-x64 }}/g" \
                       -e "s/{{SHA_LINUX_ARM64}}/${{ steps.sha.outputs.linux-arm64 }}/g" \
-                      packaging/aur/.SRCINFO.tmpl > /tmp/.SRCINFO
+                      packaging/aur/.SRCINFO.in > /tmp/.SRCINFO
 
             - name: Push AUR
               env:
