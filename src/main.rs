@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use clap::{CommandFactory, Parser};
 use crossterm::ExecutableCommand;
+use crossterm::event::KeyboardEnhancementFlags;
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseEventKind,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -37,7 +39,8 @@ fn main() -> Result<()> {
         let _ = disable_raw_mode();
         let _ = io::stdout()
             .execute(LeaveAlternateScreen)
-            .and_then(|s| s.execute(DisableMouseCapture));
+            .and_then(|s| s.execute(DisableMouseCapture))
+            .and_then(|s| s.execute(PopKeyboardEnhancementFlags));
         original_hook(info);
     }));
 
@@ -83,6 +86,9 @@ fn main() -> Result<()> {
     let mut stdout = io::stdout();
     stdout.execute(EnterAlternateScreen)?;
     stdout.execute(EnableMouseCapture)?;
+    let _ = stdout.execute(PushKeyboardEnhancementFlags(
+        KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES,
+    ));
 
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -127,6 +133,7 @@ fn main() -> Result<()> {
     disable_raw_mode()?;
     io::stdout()
         .execute(DisableMouseCapture)?
+        .execute(PopKeyboardEnhancementFlags)?
         .execute(LeaveAlternateScreen)?;
     if let Some(msg) = app.exit_message {
         print!("{msg}");
@@ -722,7 +729,6 @@ fn sgr_to_style(code: &str) -> Style {
 /// For an array root, descends into the first element at each step (so
 /// completion context mirrors what `map(...)` / `select(...)` see).
 ///
-/// ponytail: hand-rolled walk instead of `qj::filter::eval_filter` so completion
 /// context lookup is O(depth × siblings) with zero cloning — recomputing via the
 /// filter engine cloned every array element and blocked the event loop.
 fn resolve_path<'a>(value: &'a qj::value::Value, path: &str) -> Cow<'a, qj::value::Value> {
