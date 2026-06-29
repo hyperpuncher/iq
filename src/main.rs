@@ -1065,10 +1065,11 @@ fn make_input_prompt(app: &App, width: u16) -> Vec<Line<'static>> {
 
     // Status line: filename left, result info right
     if error_suffix.is_empty() {
-        let info = match (&app.eval_duration, app.result_count) {
-            (Some(d), 0) => format!("{}ms", d.as_micros().max(1) / 1000),
-            (Some(d), n) => format!("{} results • {}ms", n, d.as_micros().max(1) / 1000),
-            (None, n) if n > 0 => format!("{n} results"),
+        let ms = app.eval_duration.map(|d| d.as_micros().max(1) / 1000);
+        let info = match (ms, app.result_count) {
+            (Some(ms), 0) => format!("0 results • {ms}ms"),
+            (Some(ms), 1) => format!("1 result • {ms}ms"),
+            (Some(ms), n) => format!("{n} results • {ms}ms"),
             _ => String::new(),
         };
         if info.is_empty() {
